@@ -15,8 +15,10 @@ concurrency:
 
 jobs:
   process:
-    if: github.event.issue.state == 'open' && contains(github.event.issue.labels.*.name, 'submission')
+    if: github.event.issue.state == 'open' && contains(github.event.issue.labels.*.name, 'submission') && !contains(github.event.issue.labels.*.name, 'processed')
     runs-on: ubuntu-latest
+    env:
+      SUBMISSION_ERROR_FILE: /tmp/submission-error.txt
     steps:
       - name: Acknowledge submission with reaction
         uses: actions/github-script@v7
@@ -73,6 +75,8 @@ jobs:
             - **Title ID:** ${{ steps.process.outputs.title_id }}
             - **Version:** ${{ steps.process.outputs.version }}
             - **File:** `${{ steps.process.outputs.filename }}`
+
+            Closes #${{ github.event.issue.number }}
           delete-branch: true
 
       - name: Auto-merge for Maintainers / Acknowledge Community
@@ -83,16 +87,24 @@ jobs:
           IS_COLLABORATOR: ${{ steps.process.outputs.is_collaborator }}
           ISSUE_NUM: ${{ github.event.issue.number }}
         run: |
+          gh issue edit "$ISSUE_NUM" --add-label "processed"
+
           if [ -z "$PR_URL" ]; then
             gh issue comment "$ISSUE_NUM" --body "ℹ️ **No changes detected.** The submission matches existing repository content."
             exit 0
           fi
 
           if [ "$IS_COLLABORATOR" = "true" ] && [ -n "$PR_NUMBER" ]; then
-            if gh pr merge "$PR_NUMBER" --auto --squash; then
-              gh issue comment "$ISSUE_NUM" --body "✅ **Submission accepted.** PR $PR_URL has been opened and scheduled for auto-merge."
+            AUTHOR="${{ steps.process.outputs.author }}"
+            PERM=$(gh api "repos/${{ github.repository }}/collaborators/$AUTHOR/permission" --jq '.permission' 2>/dev/null || echo "none")
+            if [ "$PERM" = "admin" ] || [ "$PERM" = "write" ]; then
+              if gh pr merge "$PR_NUMBER" --auto --squash; then
+                gh issue comment "$ISSUE_NUM" --body "✅ **Submission accepted.** PR $PR_URL has been opened and scheduled for auto-merge."
+              else
+                gh issue comment "$ISSUE_NUM" --body "🚀 **Submission accepted.** PR $PR_URL has been opened. Please review and merge."
+              fi
             else
-              gh issue comment "$ISSUE_NUM" --body "🚀 **Submission accepted.** PR $PR_URL has been opened. Please review and merge."
+              gh issue comment "$ISSUE_NUM" --body "🚀 **Submission processed.** Pull Request opened: $PR_URL. A maintainer will review and merge it."
             fi
           else
             gh issue comment "$ISSUE_NUM" --body "🚀 **Submission processed.** Pull Request opened: $PR_URL. A maintainer will review and merge it."
@@ -105,8 +117,7 @@ jobs:
           ISSUE_NUM: ${{ github.event.issue.number }}
         run: |
           ERR_MSG="Please review the Title ID format (e.g. \`PPSA01325\`), Version format (e.g. \`01.905.000\`), and ensure the attached file is valid JSON matching your submission details."
-          TMP_ERR="/tmp/submission-error.txt"
-          if [ -f "$TMP_ERR" ]; then
-            ERR_MSG="$(cat "$TMP_ERR")"
+          if [ -f "$SUBMISSION_ERROR_FILE" ]; then
+            ERR_MSG="$(cat "$SUBMISSION_ERROR_FILE")"
           fi
           gh issue comment "$ISSUE_NUM" --body "❌ **Submission failed validation.** $ERR_MSG"

@@ -1,4 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -14,6 +14,8 @@ const root = path.resolve(__dirname, "..");
 async function validate() {
   let errors = 0;
   let totalChecked = 0;
+  const seenIndices = new Set();
+  const errorMessages = [];
 
   for (const cat of CATEGORIES) {
     const dir = path.join(root, cat, "json");
@@ -30,13 +32,23 @@ async function validate() {
 
       const match = entry.name.match(STRICT_FILENAME_REGEX);
       if (!match) {
-        console.error(`[INVALID FILENAME] ${cat}/json/${entry.name}`);
-        console.error(`  Expected strict format: <PPSA>_<XX_XXX_XXX>_<Game_Name>_<Index>.json`);
+        const msg = `[INVALID FILENAME] ${cat}/json/${entry.name}: Expected strict format <PPSA>_<XX_XXX_XXX>_<Game_Name>_<Index>.json`;
+        console.error(msg);
+        errorMessages.push(msg);
         errors++;
         continue;
       }
 
-      const [, ppsa, verScore] = match;
+      const [, ppsa, verScore, , indexNum] = match;
+      const indexKey = `${cat}_${ppsa}_${verScore}_${indexNum}`;
+      if (seenIndices.has(indexKey)) {
+        const msg = `[DUPLICATE INDEX] ${cat}/json/${entry.name}: index ${indexNum} already exists for ${ppsa} ${verScore}.`;
+        console.error(msg);
+        errorMessages.push(msg);
+        errors++;
+      }
+      seenIndices.add(indexKey);
+
       const fullPath = path.join(dir, entry.name);
       try {
         const raw = await readFile(fullPath, "utf8");
@@ -48,18 +60,27 @@ async function validate() {
           );
         }
       } catch (err) {
-        console.error(`[INVALID CONTENT] ${cat}/json/${entry.name}: ${err.message}`);
+        const msg = `[INVALID CONTENT] ${cat}/json/${entry.name}: ${err.message}`;
+        console.error(msg);
+        errorMessages.push(msg);
         errors++;
       }
     }
   }
 
   if (totalChecked === 0) {
-    console.error("[ERROR] No module files found to validate. Check repository directory structure.");
-    process.exit(1);
+    const msg = "[ERROR] No module files found to validate. Check repository directory structure.";
+    console.error(msg);
+    errorMessages.push(msg);
+    errors++;
   }
 
   if (errors > 0) {
+    if (process.env.SUBMISSION_ERROR_FILE) {
+      try {
+        await writeFile(process.env.SUBMISSION_ERROR_FILE, errorMessages.join("\n"), "utf8");
+      } catch (_) {}
+    }
     console.error(`\nValidation failed with ${errors} error(s) out of ${totalChecked} files.`);
     process.exit(1);
   } else {

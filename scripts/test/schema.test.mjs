@@ -149,5 +149,66 @@ describe("Schema & Validation Tests", () => {
         ),
       /must equal 'off' length/
     );
+
+    // BigInt address out of range (<= 0 or > 48-bit userspace)
+    assert.throws(
+      () =>
+        validateModuleJson(
+          { ...withUnderscores, mods: [{ name: "Mod", memory: [{ offset: "0x0", on: "00", off: "00" }] }] },
+          "PPSA01325",
+          "01_905_000"
+        ),
+      /is out of valid memory range/
+    );
+    assert.throws(
+      () =>
+        validateModuleJson(
+          { ...withUnderscores, mods: [{ name: "Mod", memory: [{ offset: "0x800000000000", on: "00", off: "00" }] }] },
+          "PPSA01325",
+          "01_905_000"
+        ),
+      /is out of valid memory range/
+    );
+
+    // Whitespace only name or title must fail strict validation
+    assert.throws(
+      () => validateModuleJson({ id: "PPSA01325", version: "01.905.000", name: "   " }, "PPSA01325", "01_905_000", { isStrict: true }),
+      /Missing required field 'name' or 'title'/
+    );
+
+    // Strict mode requires mods for patches and cheats
+    assert.throws(
+      () => validateModuleJson({ id: "PPSA01325", version: "01.905.000", name: "Patch" }, "PPSA01325", "01_905_000", { isStrict: true, category: "patches" }),
+      /Field 'mods' must be a non-empty array/
+    );
+    assert.throws(
+      () => validateModuleJson({ id: "PPSA01325", version: "01.905.000", name: "Cheat", mods: [] }, "PPSA01325", "01_905_000", { isStrict: true, category: "cheats" }),
+      /Field 'mods' must be a non-empty array/
+    );
+
+    // Configs do not require mods
+    assert.ok(
+      validateModuleJson({ id: "PPSA01325", version: "01.905.000", name: "Config Preset", config: { resolution: "4k" } }, "PPSA01325", "01_905_000", { isStrict: true, category: "configs" })
+    );
+  });
+
+  test("version normalization rejects components exceeding length limits", () => {
+    assert.throws(() => normalizeVersionToFilename("100.0.0"), /Component numbers exceed allowed length/);
+    assert.throws(() => normalizeVersionToFilename("01.1000.00"), /Component numbers exceed allowed length/);
+    assert.throws(() => normalizeVersionToFilename("01.000.1000"), /Component numbers exceed allowed length/);
+  });
+
+  test("Cyberpunk 2077 and number-ending titles are preserved without index collision", async () => {
+    const tmpDir = await mkdtemp(path.join(os.tmpdir(), "kyty-cyberpunk-"));
+    try {
+      const f1 = await getNextModuleFilename(tmpDir, "PPSA01234", "01_000_000", "Cyberpunk_2077");
+      assert.equal(f1, "PPSA01234_01_000_000_Cyberpunk_2077_1.json");
+      await writeFile(path.join(tmpDir, f1), "{}");
+
+      const f2 = await getNextModuleFilename(tmpDir, "PPSA01234", "01_000_000", "Cyberpunk_2077");
+      assert.equal(f2, "PPSA01234_01_000_000_Cyberpunk_2077_2.json");
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
   });
 });

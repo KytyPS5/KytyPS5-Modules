@@ -4,11 +4,11 @@ import { readdir } from "node:fs/promises";
 // Matches: PPSA01325_01_905_000_Astros_Playroom_1.json
 // Accommodates unindexed PPSA01325_01_905_000_Astros_Playroom.json gracefully
 export const FILENAME_REGEX =
-  /^([A-Z]{4}\d{5})_(\d{2}_\d{3}_\d{3})_([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*?)(?:_(\d+))?\.json$/;
+  /^([A-Z]{4}\d{5})_(\d{2}_\d{3}_\d{3})_([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*?)(?:_([1-9]\d{0,4}))?\.json$/;
 
 // Strict regex where numeric index suffix is required (_1, _2, ...)
 export const STRICT_FILENAME_REGEX =
-  /^([A-Z]{4}\d{5})_(\d{2}_\d{3}_\d{3})_([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)_(\d+)\.json$/;
+  /^([A-Z]{4}\d{5})_(\d{2}_\d{3}_\d{3})_([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)_([1-9]\d{0,4})\.json$/;
 
 export const CATEGORIES = ["patches", "cheats", "configs"];
 
@@ -62,9 +62,12 @@ export function normalizeVersionToFilename(ver) {
   // Parse versions separated by dots or underscores
   const parts = clean.split("_").filter(Boolean);
   if (parts.length >= 1 && parts.length <= 3 && parts.every((p) => /^\d+$/.test(p))) {
-    const p1 = parts[0].padStart(2, "0").slice(-2);
-    const p2 = (parts[1] || "0").padStart(3, "0").slice(-3);
-    const p3 = (parts[2] || "0").padStart(3, "0").slice(-3);
+    if (parts[0].length > 2 || (parts[1] && parts[1].length > 3) || (parts[2] && parts[2].length > 3)) {
+      throw new Error(`Invalid version format: "${ver}". Component numbers exceed allowed length.`);
+    }
+    const p1 = parts[0].padStart(2, "0");
+    const p2 = (parts[1] || "0").padStart(3, "0");
+    const p3 = (parts[2] || "0").padStart(3, "0");
     return `${p1}_${p2}_${p3}`;
   }
 
@@ -83,7 +86,7 @@ export function normalizeVersionToDisplay(ver) {
  * Validates a title ID (e.g. PPSA01325).
  */
 export function validateTitleId(id) {
-  const clean = cleanInputString(id).toUpperCase();
+  const clean = cleanInputString(id).toUpperCase().replace(/[-_\s]/g, "");
   if (!/^[A-Z]{4}\d{5}$/.test(clean)) {
     throw new Error(`Invalid Title ID: "${id}". Expected format like PPSA01325.`);
   }
@@ -102,14 +105,12 @@ export async function getNextModuleFilename(categoryDir, ppsa, versionUnderScore
     existingFiles = [];
   }
 
-  // Look for any existing file for this PPSA and version to prevent collision
-  const ppsaVerPattern = new RegExp(`^${ppsa}_${versionUnderScore}_.*_(\\d+)\\.json$`);
   let maxIndex = 0;
 
   for (const file of existingFiles) {
-    const match = file.match(ppsaVerPattern);
-    if (match && match[1]) {
-      const idx = parseInt(match[1], 10);
+    const match = file.match(STRICT_FILENAME_REGEX);
+    if (match && match[1] === ppsa && match[2] === versionUnderScore) {
+      const idx = parseInt(match[4], 10);
       if (idx > maxIndex) maxIndex = idx;
     }
   }
@@ -126,14 +127,16 @@ export function validateModuleJson(parsed, expectedId = null, expectedVersion = 
     throw new Error("Module file must be a JSON object.");
   }
 
+  const title = (parsed.name || parsed.title || "").trim();
+
   if (isStrict) {
     if (!parsed.id) throw new Error("Missing required field 'id' in module JSON.");
     if (!parsed.version) throw new Error("Missing required field 'version' in module JSON.");
-    if (!parsed.name && !parsed.title) throw new Error("Missing required field 'name' or 'title' in module JSON.");
+    if (!title) throw new Error("Missing required field 'name' or 'title' in module JSON.");
   }
 
   if (expectedId && parsed.id) {
-    const jsonId = String(parsed.id).trim().toUpperCase();
+    const jsonId = String(parsed.id).trim().toUpperCase().replace(/[-_\s]/g, "");
     if (jsonId !== expectedId) {
       throw new Error(`Title ID in JSON ("${jsonId}") does not match expected "${expectedId}".`);
     }
@@ -145,6 +148,12 @@ export function validateModuleJson(parsed, expectedId = null, expectedVersion = 
     const expVer = normalizeVersionToFilename(expectedVersion);
     if (jsonVer !== expVer) {
       throw new Error(`Version in JSON ("${parsed.version}") does not match expected "${expectedVersion}".`);
+    }
+  }
+
+  if (category === "patches" || category === "cheats") {
+    if (isStrict && (!Array.isArray(parsed.mods) || parsed.mods.length === 0)) {
+      throw new Error(`Field 'mods' must be a non-empty array for ${category}.`);
     }
   }
 
@@ -173,6 +182,10 @@ export function validateModuleJson(parsed, expectedId = null, expectedVersion = 
           }
           if (typeof mem.offset !== "string" || !/^0x[0-9a-fA-F]+$/i.test(mem.offset.trim())) {
             throw new Error(`mods[${i}].memory[${j}].offset must be a hex address string like '0x1234'.`);
+          }
+          const addr = BigInt(mem.offset.trim());
+          if (addr <= 0n || addr > 0x7FFFFFFFFFFFn) {
+            throw new Error(`mods[${i}].memory[${j}].offset (${mem.offset.trim()}) is out of valid memory range.`);
           }
           if (typeof mem.on !== "string" || !/^[0-9a-fA-F]+$/.test(mem.on.trim()) || mem.on.trim().length % 2 !== 0) {
             throw new Error(`mods[${i}].memory[${j}].on must be an even-length hex string.`);

@@ -31,6 +31,7 @@ async function run() {
   };
 
   let totalFiles = 0;
+  const seenIndices = new Set();
 
   for (const cat of CATEGORIES) {
     const dir = path.join(root, cat, "json");
@@ -44,17 +45,21 @@ async function run() {
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
 
-      let match = entry.name.match(STRICT_FILENAME_REGEX);
-      if (!match) {
-        match = entry.name.match(FILENAME_REGEX);
-      }
-
+      const match = entry.name.match(STRICT_FILENAME_REGEX);
       if (!match) {
         console.warn(`[WARN] Skipping non-conforming file: ${cat}/json/${entry.name}`);
         continue;
       }
 
       const [, ppsa, verScore, gameName, seq] = match;
+      const indexNum = parseInt(seq, 10);
+      const indexKey = `${cat}_${ppsa}_${verScore}_${indexNum}`;
+      if (seenIndices.has(indexKey)) {
+        throw new Error(
+          `Duplicate module index ${indexNum} detected for ${cat} ${ppsa} ${verScore}: file ${entry.name}`
+        );
+      }
+      seenIndices.add(indexKey);
       const fullPath = path.join(dir, entry.name);
       const rawDiskBytes = await readFile(fullPath);
 
@@ -95,7 +100,7 @@ async function run() {
         id: ppsa,
         version: normalizeVersionToDisplay(verScore),
         gameName: gameName.replace(/_/g, " "),
-        index: seq ? parseInt(seq, 10) : 1,
+        index: indexNum,
         title,
         description,
         author,

@@ -4,22 +4,23 @@ import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import {
-  CATEGORIES,
-  CATEGORY_SINGULAR,
+  cleanInputString,
   sanitizeGameName,
+  validateTitleId,
   normalizeVersionToFilename,
   normalizeVersionToDisplay,
-  validateTitleId,
   getNextModuleFilename,
   validateModuleJson,
-  cleanInputString,
+  CATEGORY_SINGULAR,
 } from "./lib/schema.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 
-const ERROR_FILE = path.join(os.tmpdir(), "submission-error.txt");
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB max
+const ERROR_FILE =
+  process.env.SUBMISSION_ERROR_FILE ||
+  path.join(os.tmpdir(), "submission-error.txt");
 
 const KNOWN_FIELDS = new Set([
   "title id",
@@ -38,13 +39,18 @@ const KNOWN_FIELDS = new Set([
 
 function parseIssueFormBody(body) {
   const sections = Object.create(null);
-  const regex = /^###\s+([^\r\n]+)\r?\n([\s\S]*?)(?=^###\s+|$)/gm;
+  const escapedFields = Array.from(KNOWN_FIELDS).map((f) =>
+    f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  );
+  const regex = new RegExp(
+    `^###\\s+(${escapedFields.join("|")})\\r?\\n([\\s\\S]*?)(?=^###\\s+(?:${escapedFields.join("|")})|$)`,
+    "gim"
+  );
   let match;
   while ((match = regex.exec(body)) !== null) {
     const key = match[1].trim().toLowerCase();
-    const val = match[2].trim();
-    if (KNOWN_FIELDS.has(key)) {
-      sections[key] = val;
+    if (!(key in sections)) {
+      sections[key] = match[2].trim();
     }
   }
   return sections;
@@ -58,11 +64,37 @@ function cleanFieldValue(val) {
 }
 
 function extractAttachmentUrl(text) {
-  // Only permit legitimate GitHub attachment endpoints (pre-signed files or repo file uploads)
-  const trustedAttachmentRegex =
-    /https:\/\/(?:github\.com\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+\/files\/\d+\/[^\s)]+\.json|github\.com\/user-attachments\/files\/\d+\/[^\s)]+\.json)/i;
-  const match = text.match(trustedAttachmentRegex);
-  return match ? match[0] : null;
+  if (!text) return null;
+  // Match markdown link [label](url) or bare URL
+  const mdMatch = text.match(
+    /\[[^\]]*\]\((https:\/\/github\.com\/(?:[^\s)]+?)\.json(?:[?#][^\s)]*)?)\)/i
+  );
+  const candidate = mdMatch ? mdMatch[1] : null;
+
+  const urlToTest = candidate || (text.match(/https:\/\/github\.com\/[^\s)]+?\.json(?:[?#][^\s)]*)?/i)?.[0] ?? null);
+  if (!urlToTest) return null;
+
+  try {
+    const parsed = new URL(urlToTest);
+    if (parsed.protocol !== "https:") return null;
+    if (parsed.hostname !== "github.com") return null;
+
+    // Disallow path traversal
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    if (segments.includes("..") || segments.includes(".")) return null;
+
+    // Must be either user-attachments/files/... or <owner>/<repo>/files/...
+    const isUserAttachments = segments[0] === "user-attachments" && segments[1] === "files";
+    const isRepoFiles = segments.length >= 4 && segments[2] === "files";
+    if (!isUserAttachments && !isRepoFiles) return null;
+
+    // Path must end with .json before any query parameters
+    if (!parsed.pathname.toLowerCase().endsWith(".json")) return null;
+
+    return parsed.href;
+  } catch {
+    return null;
+  }
 }
 
 async function writeFailure(msg) {
@@ -106,9 +138,15 @@ async function run() {
   const labels = (issue.labels || []).map((l) => (typeof l === "string" ? l : l.name));
 
   let category = "patches";
-  if (labels.includes("cheat") || issue.title?.toLowerCase().includes("[cheat]")) {
+  if (labels.includes("cheat")) {
     category = "cheats";
-  } else if (labels.includes("config") || issue.title?.toLowerCase().includes("[config]")) {
+  } else if (labels.includes("config")) {
+    category = "configs";
+  } else if (labels.includes("patch")) {
+    category = "patches";
+  } else if (issue.title?.toLowerCase().includes("[cheat]")) {
+    category = "cheats";
+  } else if (issue.title?.toLowerCase().includes("[config]")) {
     category = "configs";
   } else {
     category = "patches";
@@ -138,7 +176,9 @@ async function run() {
   if (cleanAttachment.startsWith("{") && cleanAttachment.endsWith("}")) {
     jsonText = cleanAttachment;
   } else {
-    const attachmentUrl = extractAttachmentUrl(cleanAttachment || issue.body || "");
+    const attachmentUrl =
+      extractAttachmentUrl(cleanAttachment) ||
+      extractAttachmentUrl(issue.body || "");
     if (!attachmentUrl) {
       throw new Error(
         "No valid GitHub attachment link or inline JSON found in submission. Please upload a .json file or paste valid JSON."
@@ -156,15 +196,19 @@ async function run() {
       throw new Error(`Failed to download attached JSON (${res.status} ${res.statusText}).`);
     }
 
-    const contentLength = parseInt(res.headers.get("content-length") || "0", 10);
-    if (contentLength > MAX_FILE_SIZE_BYTES) {
-      throw new Error(`Attachment exceeds maximum allowed size of 5 MB (${(contentLength / 1024 / 1024).toFixed(1)} MB).`);
+    // Stream download with byte counter to prevent memory exhaustion even if Content-Length is missing
+    const chunks = [];
+    let totalBytes = 0;
+    for await (const chunk of res.body) {
+      totalBytes += chunk.length;
+      if (totalBytes > MAX_FILE_SIZE_BYTES) {
+        throw new Error(
+          `Attachment exceeds maximum allowed size of 5 MB (${(totalBytes / 1024 / 1024).toFixed(1)} MB).`
+        );
+      }
+      chunks.push(chunk);
     }
-
-    jsonText = await res.text();
-    if (jsonText.length > MAX_FILE_SIZE_BYTES) {
-      throw new Error("Attachment text exceeds maximum allowed size of 5 MB.");
-    }
+    jsonText = Buffer.concat(chunks).toString("utf8");
   }
 
   let parsedJson;
@@ -184,7 +228,10 @@ async function run() {
   parsedJson.version = normalizeVersionToDisplay(parsedJson.version || version);
   if (modTitle && !parsedJson.name && !parsedJson.title) parsedJson.name = modTitle;
   if (description && !parsedJson.description) parsedJson.description = description;
-  parsedJson.author = author;
+  // Preserve original author/creator if already specified in JSON
+  if (!parsedJson.author && !parsedJson.creator) {
+    parsedJson.author = author;
+  }
 
   validateModuleJson(parsedJson, ppsa, version, { isStrict: true, category });
 
@@ -203,7 +250,8 @@ async function run() {
   console.log(`[INFO] Successfully written module to ${category}/json/${filename}`);
 
   const singular = CATEGORY_SINGULAR[category] || category;
-  const isCollaborator = ["OWNER", "MEMBER", "COLLABORATOR"].includes(authorAssociation);
+  // Only grant collaborator status to repository owners or direct collaborators (not blanket organization members)
+  const isCollaborator = ["OWNER", "COLLABORATOR"].includes(authorAssociation);
   const branchSuffix = `${singular}-${ppsa}-${version}-i${issueNumber}`;
 
   // Sanitize PR title: single line, no backticks/quotes, max 80 chars
@@ -221,13 +269,15 @@ async function run() {
       formatOutput("title_id", ppsa),
       formatOutput("version", version),
       formatOutput("filename", filename),
-      formatOutput("author", author),
-      formatOutput("is_collaborator", isCollaborator ? "true" : "false"),
       formatOutput("branch_suffix", branchSuffix),
       formatOutput("pr_title", prTitle),
-    ].join("\n");
-    await writeFile(out, outputs + "\n", { flag: "a" });
+      formatOutput("author", author),
+      formatOutput("is_collaborator", isCollaborator ? "true" : "false"),
+    ].join("\n") + "\n";
+    await writeFile(out, outputs, { flag: "a" });
   }
+
+  console.log("[INFO] Submission processed successfully.");
 }
 
 run().catch(async (err) => {
