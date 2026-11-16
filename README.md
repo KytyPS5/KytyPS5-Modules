@@ -91,9 +91,9 @@ The catalog is distributed dynamically via **GitHub Pages** (immediate updates) 
 
 ### Base URLs:
 - **GitHub Pages (Dynamic Catalog with immediate ETag updates)**:
-  `https://<owner>.github.io/kytyps5-modules`
+  `https://<owner>.github.io/<repo>` (e.g. `https://kytyps5.github.io/KytyPS5-Modules`)
 - **jsDelivr CDN (Fast Global Edge Caching for static assets)**:
-  `https://cdn.jsdelivr.net/gh/<owner>/kytyps5-modules@main`
+  `https://cdn.jsdelivr.net/gh/<owner>/<repo>@main` (e.g. `https://cdn.jsdelivr.net/gh/KytyPS5/KytyPS5-Modules@main`)
 
 ---
 
@@ -153,19 +153,21 @@ import { createHash } from "node:crypto";
 
 class KytyModuleManager {
   private repoOwner: string;
+  private repoName: string;
   private cachedEtag: string | null = null;
   private catalog: CatalogIndex | null = null;
 
-  constructor(repoOwner: string = "KytyPS5") {
+  constructor(repoOwner: string = "KytyPS5", repoName: string = "KytyPS5-Modules") {
     this.repoOwner = repoOwner;
+    this.repoName = repoName;
   }
 
   get pagesBaseUrl(): string {
-    return `https://${this.repoOwner}.github.io/kytyps5-modules`;
+    return `https://${this.repoOwner}.github.io/${this.repoName}`;
   }
 
   get cdnBaseUrl(): string {
-    return `https://cdn.jsdelivr.net/gh/${this.repoOwner}/kytyps5-modules@main`;
+    return `https://cdn.jsdelivr.net/gh/${this.repoOwner}/${this.repoName}@main`;
   }
 
   /**
