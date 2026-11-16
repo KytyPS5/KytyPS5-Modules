@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "catalogHash": "60c825495e1d2ec47e0ea5b2cdc67988a1bab0f76a036b26347e1cc6cdfe2d56",
-  "updatedAt": "2026-11-14T15:17:50.535Z",
+  "catalogHash": "a249fdf80aeff6e33c65ca85343922df0be28421f4da8b8a028157c77962b728",
+  "updatedAt": "2026-11-16T06:54:05.188Z",
   "patches": {
     "PPSA21564": [
       {
@@ -82,6 +82,64 @@
       }
     ]
   },
-  "cheats": {},
-  "configs": {}
+  "cheats": {
+    "PPSA21567": [
+      {
+        "id": "PPSA21567",
+        "version": "01.018.000",
+        "gameName": "Astro Bot",
+        "index": 1,
+        "title": "Infinite Lives / Invincibility & Coin Multiplier",
+        "description": "Infinite lives, invulnerability frames, and max coin multiplier cheats for Astro Bot.",
+        "author": "Community",
+        "path": "cheats/json/PPSA21567_01_018_000_Astro_Bot_1.json",
+        "sha256": "9a781ce32b93e6d73bb3529a3f26f3ddfc2745dc30bfbe3751747e4df86eb626",
+        "size": 696
+      }
+    ],
+    "PPSA28997": [
+      {
+        "id": "PPSA28997",
+        "version": "01.008.001",
+        "gameName": "God of War Sons of Sparta",
+        "index": 1,
+        "title": "God Mode & Infinite Spartan Rage",
+        "description": "Immunity to incoming damage and unlimited Spartan Rage duration.",
+        "author": "Community",
+        "path": "cheats/json/PPSA28997_01_008_001_God_of_War_Sons_of_Sparta_1.json",
+        "sha256": "f4b55385a2f155dbb8254100c313b050ded6cc1910d7d69b899e0dc55efba55a",
+        "size": 674
+      }
+    ]
+  },
+  "configs": {
+    "PPSA21567": [
+      {
+        "id": "PPSA21567",
+        "version": "01.018.000",
+        "gameName": "Astro Bot",
+        "index": 1,
+        "title": "Optimal 60 FPS & Low Latency Preset",
+        "description": "Recommended configuration preset targeting stable 60 FPS on mid-range hardware with optimized render resolution and thread affinities.",
+        "author": "KytyPS5 Team",
+        "path": "configs/json/PPSA21567_01_018_000_Astro_Bot_1.json",
+        "sha256": "caf73bad5c8d5d93418d21862fe0b3d3fac3c1636d99b2523922d0cd08a41e9e",
+        "size": 581
+      }
+    ],
+    "PPSA28997": [
+      {
+        "id": "PPSA28997",
+        "version": "01.008.001",
+        "gameName": "God of War Sons of Sparta",
+        "index": 1,
+        "title": "High Performance 1440p Preset",
+        "description": "Balanced preset for 1440p rendering with high fidelity shading and 60 FPS lock.",
+        "author": "Community",
+        "path": "configs/json/PPSA28997_01_008_001_God_of_War_Sons_of_Sparta_1.json",
+        "sha256": "9475424ec1627f1056b18a61c3e427fe581d12dc5483af542b4efce1e5662990",
+        "size": 414
+      }
+    ]
+  }
 }

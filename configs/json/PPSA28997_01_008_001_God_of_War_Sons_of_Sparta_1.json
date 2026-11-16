@@ -1,0 +1,18 @@
+{
+  "id": "PPSA28997",
+  "version": "01.008.001",
+  "name": "High Performance 1440p Preset",
+  "description": "Balanced preset for 1440p rendering with high fidelity shading and 60 FPS lock.",
+  "author": "Community",
+  "config": {
+    "graphics": {
+      "targetFps": 60,
+      "resolutionScale": 1.33,
+      "vsync": true,
+      "anisotropicFiltering": 16
+    },
+    "cpu": {
+      "threadCount": 12
+    }
+  }
+}

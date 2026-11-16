@@ -1,0 +1,23 @@
+{
+  "id": "PPSA21567",
+  "version": "01.018.000",
+  "name": "Optimal 60 FPS & Low Latency Preset",
+  "description": "Recommended configuration preset targeting stable 60 FPS on mid-range hardware with optimized render resolution and thread affinities.",
+  "author": "KytyPS5 Team",
+  "config": {
+    "graphics": {
+      "targetFps": 60,
+      "resolutionScale": 1.0,
+      "vsync": true,
+      "renderer": "vulkan"
+    },
+    "cpu": {
+      "threadCount": 8,
+      "affinity": "performance-cores"
+    },
+    "audio": {
+      "backend": "cubeb",
+      "bufferSize": 512
+    }
+  }
+}

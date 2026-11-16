@@ -1,0 +1,31 @@
+{
+  "id": "PPSA21567",
+  "version": "01.018.000",
+  "name": "Infinite Lives / Invincibility & Coin Multiplier",
+  "description": "Infinite lives, invulnerability frames, and max coin multiplier cheats for Astro Bot.",
+  "author": "Community",
+  "mods": [
+    {
+      "name": "Infinite Lives",
+      "enabled": true,
+      "memory": [
+        {
+          "offset": "0x70cd9c0",
+          "on": "9090909090",
+          "off": "e812345678"
+        }
+      ]
+    },
+    {
+      "name": "Max Coins (9999)",
+      "enabled": true,
+      "memory": [
+        {
+          "offset": "0x70cd9e0",
+          "on": "c705000000000f270000",
+          "off": "89050000000000000000"
+        }
+      ]
+    }
+  ]
+}

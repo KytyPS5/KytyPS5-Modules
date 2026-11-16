@@ -1,0 +1,31 @@
+{
+  "id": "PPSA28997",
+  "version": "01.008.001",
+  "name": "God Mode & Infinite Spartan Rage",
+  "description": "Immunity to incoming damage and unlimited Spartan Rage duration.",
+  "author": "Community",
+  "mods": [
+    {
+      "name": "Invincibility (God Mode)",
+      "enabled": true,
+      "memory": [
+        {
+          "offset": "0x51ab300",
+          "on": "9090909090",
+          "off": "e8a0123400"
+        }
+      ]
+    },
+    {
+      "name": "Infinite Spartan Rage",
+      "enabled": true,
+      "memory": [
+        {
+          "offset": "0x51ab340",
+          "on": "c705000000000000803f",
+          "off": "c5fa1105000000009090"
+        }
+      ]
+    }
+  ]
+}
