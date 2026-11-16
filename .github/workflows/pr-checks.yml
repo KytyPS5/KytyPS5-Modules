@@ -4,6 +4,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -20,7 +24,7 @@ jobs:
           node-version: 22
 
       - name: Run unit tests
-        run: node --test scripts/test/*.test.mjs
+        run: npm test
 
       - name: Validate module files
         run: node scripts/validate-modules.mjs
@@ -28,4 +32,8 @@ jobs:
       - name: Verify catalog index is up to date
         run: |
           node scripts/build-index.mjs
-          git diff --exit-code index.json index.min.json || (echo "Catalog index is out of date. Please run npm run build:index." && exit 1)
+          if [ -n "$(git status --porcelain index.json index.min.json)" ]; then
+            echo "Catalog index is out of date or untracked. Please run npm run build:index."
+            exit 1
+          fi
+          git ls-files --error-unmatch index.json index.min.json > /dev/null

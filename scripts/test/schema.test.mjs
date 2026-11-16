@@ -38,12 +38,15 @@ describe("Schema & Validation Tests", () => {
     assert.equal(cleanInputString(undefined), "");
   });
 
-  test("sanitizeGameName converts special characters and spaces cleanly", () => {
+  test("sanitizeGameName converts special characters, spaces, and supports fallback", () => {
     assert.equal(sanitizeGameName("Astro's Playroom"), "Astros_Playroom");
     assert.equal(sanitizeGameName("God of War: Ragnarök"), "God_of_War_Ragnarok");
     assert.equal(sanitizeGameName("Cyberpunk 2077"), "Cyberpunk_2077");
     assert.equal(sanitizeGameName("Demon's Souls - Remake"), "Demons_Souls_Remake");
     assert.equal(sanitizeGameName("_No response_"), "Unknown_Game");
+    assert.equal(sanitizeGameName("_No response_", "PPSA01325"), "PPSA01325");
+    assert.equal(sanitizeGameName("黑神话：悟空", "PPSA01325"), "PPSA01325");
+    assert.equal(sanitizeGameName("ペルソナ5", "PPSA01325"), "5");
   });
 
   test("version normalization automatically converts dots to underscores and pads", () => {
@@ -101,27 +104,44 @@ describe("Schema & Validation Tests", () => {
   });
 
   test("validateModuleJson validates payload with dots or underscores in version", () => {
-    // When input version has dots and payload has underscores, or vice versa
+    // When input version has dots and payload has dots
     const withDots = { id: "PPSA01325", version: "01.905.000", name: "60 FPS" };
     const withUnderscores = { id: "PPSA01325", version: "01_905_000", name: "60 FPS" };
 
     assert.ok(validateModuleJson(withDots, "PPSA01325", "01_905_000", { isStrict: true }));
-    assert.ok(validateModuleJson(withUnderscores, "PPSA01325", "01.905.000", { isStrict: true }));
     assert.ok(validateModuleJson(withDots, "PPSA01325", "01.905.000", { isStrict: true }));
-    assert.ok(validateModuleJson(withUnderscores, "PPSA01325", "01_905_000", { isStrict: true }));
+
+    // In strict mode, underscores in payload version are rejected to enforce standard dot notation
+    assert.throws(
+      () => validateModuleJson(withUnderscores, "PPSA01325", "01_905_000", { isStrict: true }),
+      /must not use underscores/
+    );
+
+    // In non-strict mode, payload versions with underscores are allowed
+    assert.ok(validateModuleJson(withUnderscores, "PPSA01325", "01_905_000", { isStrict: false }));
+
+    // Non-string name or title must throw clean error, not TypeError
+    assert.throws(
+      () => validateModuleJson({ id: "PPSA01325", version: "01.905.000", name: 123 }, "PPSA01325", "01.905.000"),
+      /Field 'name' in module JSON must be a string/
+    );
+    assert.throws(
+      () => validateModuleJson({ id: "PPSA01325", version: "01.905.000", title: true }, "PPSA01325", "01.905.000"),
+      /Field 'title' in module JSON must be a string/
+    );
 
     // Empty object must fail strict validation
     assert.throws(() => validateModuleJson({}, "PPSA01325", "01_905_000", { isStrict: true }), /Missing required field 'id'/);
 
     // Mismatched ID must fail
-    const mismatchedId = { id: "PPSA99999", version: "01_905_000", name: "Test" };
+    const mismatchedId = { id: "PPSA99999", version: "01.905.000", name: "Test" };
     assert.throws(() => validateModuleJson(mismatchedId, "PPSA01325", "01_905_000"), /does not match/);
 
     // Invalid memory offset
     assert.throws(
       () =>
         validateModuleJson(
-          { ...withUnderscores, mods: [{ name: "Mod", memory: [{ offset: "not-hex", on: "00", off: "00" }] }] },
+          { ...withDots, mods: [{ name: "Mod", memory: [{ offset: "not-hex", on: "00", off: "00" }] }] },
           "PPSA01325",
           "01_905_000"
         ),
@@ -132,7 +152,7 @@ describe("Schema & Validation Tests", () => {
     assert.throws(
       () =>
         validateModuleJson(
-          { ...withUnderscores, mods: [{ name: "Mod", memory: [{ offset: "0x1234", on: "001", off: "000" }] }] },
+          { ...withDots, mods: [{ name: "Mod", memory: [{ offset: "0x1234", on: "001", off: "000" }] }] },
           "PPSA01325",
           "01_905_000"
         ),
@@ -143,7 +163,7 @@ describe("Schema & Validation Tests", () => {
     assert.throws(
       () =>
         validateModuleJson(
-          { ...withUnderscores, mods: [{ name: "Mod", memory: [{ offset: "0x1234", on: "0011", off: "00" }] }] },
+          { ...withDots, mods: [{ name: "Mod", memory: [{ offset: "0x1234", on: "0011", off: "00" }] }] },
           "PPSA01325",
           "01_905_000"
         ),
@@ -154,7 +174,7 @@ describe("Schema & Validation Tests", () => {
     assert.throws(
       () =>
         validateModuleJson(
-          { ...withUnderscores, mods: [{ name: "Mod", memory: [{ offset: "0x0", on: "00", off: "00" }] }] },
+          { ...withDots, mods: [{ name: "Mod", memory: [{ offset: "0x0", on: "00", off: "00" }] }] },
           "PPSA01325",
           "01_905_000"
         ),
@@ -163,7 +183,7 @@ describe("Schema & Validation Tests", () => {
     assert.throws(
       () =>
         validateModuleJson(
-          { ...withUnderscores, mods: [{ name: "Mod", memory: [{ offset: "0x800000000000", on: "00", off: "00" }] }] },
+          { ...withDots, mods: [{ name: "Mod", memory: [{ offset: "0x800000000000", on: "00", off: "00" }] }] },
           "PPSA01325",
           "01_905_000"
         ),

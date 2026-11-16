@@ -40,11 +40,13 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          git fetch origin main
+          git reset --hard origin/main
+          node scripts/build-index.mjs
           if [ -n "$(git status --porcelain index.json index.min.json)" ]; then
             git add index.json index.min.json
             git commit -m "chore: synchronize index.json & index.min.json [skip ci]"
-            git pull origin main --rebase
-            git push origin main
+            git push origin main || echo "Concurrent push detected; next workflow run will synchronize."
           fi
 
       - name: Prepare Pages Artifact

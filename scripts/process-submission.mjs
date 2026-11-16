@@ -237,7 +237,8 @@ async function run() {
 
   // If game name wasn't explicitly supplied, try parsing from JSON name or fallback to PPSA
   const resolvedGameName = sanitizeGameName(
-    gameNameInput || parsedJson.name || parsedJson.gameName || ppsa
+    gameNameInput || parsedJson.name || parsedJson.gameName || ppsa,
+    ppsa
   );
 
   const categoryDir = path.join(root, category, "json");

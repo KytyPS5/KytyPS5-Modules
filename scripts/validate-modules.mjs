@@ -52,13 +52,11 @@ async function validate() {
       const fullPath = path.join(dir, entry.name);
       try {
         const raw = await readFile(fullPath, "utf8");
+        if (raw.includes("\r")) {
+          throw new Error("File contains carriage return (CR/CRLF) line endings. Only LF line endings are permitted.");
+        }
         const parsed = JSON.parse(raw);
         validateModuleJson(parsed, ppsa, verScore, { isStrict: true, category: cat });
-        if (typeof parsed.version === "string" && parsed.version.includes("_")) {
-          throw new Error(
-            `Version in JSON ("${parsed.version}") must not use underscores; use standard dot notation (e.g. "${normalizeVersionToDisplay(parsed.version)}").`
-          );
-        }
       } catch (err) {
         const msg = `[INVALID CONTENT] ${cat}/json/${entry.name}: ${err.message}`;
         console.error(msg);

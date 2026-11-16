@@ -6,7 +6,6 @@ import {
   CATEGORIES,
   CATEGORY_SINGULAR,
   STRICT_FILENAME_REGEX,
-  FILENAME_REGEX,
   normalizeVersionToDisplay,
   validateModuleJson,
 } from "./lib/schema.mjs";
@@ -47,8 +46,9 @@ async function run() {
 
       const match = entry.name.match(STRICT_FILENAME_REGEX);
       if (!match) {
-        console.warn(`[WARN] Skipping non-conforming file: ${cat}/json/${entry.name}`);
-        continue;
+        throw new Error(
+          `Non-conforming module filename: ${cat}/json/${entry.name}. Expected format: <PPSA>_<XX_XXX_XXX>_<Game_Name>_<Index>.json`
+        );
       }
 
       const [, ppsa, verScore, gameName, seq] = match;
@@ -63,8 +63,12 @@ async function run() {
       const fullPath = path.join(dir, entry.name);
       const rawDiskBytes = await readFile(fullPath);
 
-      // Normalize line endings to LF (\n) for consistent platform-independent hashing and sizing
-      const normalizedText = rawDiskBytes.toString("utf8").replace(/\r\n/g, "\n");
+      // Normalize line endings to LF (\n) and guarantee disk matches memory
+      const rawDiskText = rawDiskBytes.toString("utf8");
+      const normalizedText = rawDiskText.replace(/\r\n?/g, "\n");
+      if (rawDiskText !== normalizedText) {
+        await writeFile(fullPath, normalizedText, "utf8");
+      }
       const normalizedBytes = Buffer.from(normalizedText, "utf8");
 
       let parsed;
@@ -119,7 +123,7 @@ async function run() {
     // Deterministically sort entries within each PPSA
     for (const ppsa of Object.keys(catalog[cat])) {
       catalog[cat][ppsa].sort((a, b) => {
-        const verCmp = a.version.localeCompare(b.version, "en", { numeric: true });
+        const verCmp = a.version < b.version ? -1 : a.version > b.version ? 1 : 0;
         if (verCmp !== 0) return verCmp;
         if (a.index !== b.index) return a.index - b.index;
         return a.path.localeCompare(b.path, "en");

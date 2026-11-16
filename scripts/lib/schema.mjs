@@ -34,17 +34,16 @@ export function cleanInputString(val) {
  * e.g. "Astro's Playroom" -> "Astros_Playroom"
  * "God of War: Ragnarök" -> "God_of_War_Ragnarok"
  */
-export function sanitizeGameName(name) {
+export function sanitizeGameName(name, fallback = "Unknown_Game") {
   const cleaned = cleanInputString(name);
-  if (!cleaned || cleaned.toLowerCase() === "_no response_") return "Unknown_Game";
-  return (
-    cleaned
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "") // strip diacritics
-      .replace(/['’]/g, "") // remove quotes
-      .replace(/[^A-Za-z0-9]+/g, "_") // replace non-alphanumeric with underscore
-      .replace(/^_+|_+$/g, "") || "Unknown_Game" // trim underscores
-  );
+  if (!cleaned || cleaned.toLowerCase() === "_no response_") return fallback;
+  const sanitized = cleaned
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // strip diacritics
+    .replace(/['’]/g, "") // remove quotes
+    .replace(/[^A-Za-z0-9]+/g, "_") // replace non-alphanumeric with underscore
+    .replace(/^_+|_+$/g, ""); // trim underscores
+  return sanitized || fallback;
 }
 
 /**
@@ -127,11 +126,24 @@ export function validateModuleJson(parsed, expectedId = null, expectedVersion = 
     throw new Error("Module file must be a JSON object.");
   }
 
-  const title = (parsed.name || parsed.title || "").trim();
+  if (parsed.name !== undefined && typeof parsed.name !== "string") {
+    throw new Error("Field 'name' in module JSON must be a string.");
+  }
+  if (parsed.title !== undefined && typeof parsed.title !== "string") {
+    throw new Error("Field 'title' in module JSON must be a string.");
+  }
+
+  const rawTitle = typeof parsed.name === "string" ? parsed.name : typeof parsed.title === "string" ? parsed.title : "";
+  const title = rawTitle.trim();
 
   if (isStrict) {
     if (!parsed.id) throw new Error("Missing required field 'id' in module JSON.");
     if (!parsed.version) throw new Error("Missing required field 'version' in module JSON.");
+    if (typeof parsed.version === "string" && parsed.version.includes("_")) {
+      throw new Error(
+        `Version in JSON ("${parsed.version}") must not use underscores; use standard dot notation (e.g. "${normalizeVersionToDisplay(parsed.version)}").`
+      );
+    }
     if (!title) throw new Error("Missing required field 'name' or 'title' in module JSON.");
   }
 
